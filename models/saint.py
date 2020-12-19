@@ -86,7 +86,7 @@ class DecoderBlock(nn.Module):
       #assert out_embed.size(0)==n_dims, "input dimention should be (seq_len,batch_size,dims)"
       out_norm = self.layer_norm(out)
       mask = ut_mask(out_norm.size(0))
-      if device == "cuda":
+      if config.device == "cuda":
         mask = mask.cuda()
       out_atten , weights_attent = self.multihead_attention(query=out_norm,
                                                   key = out_norm,

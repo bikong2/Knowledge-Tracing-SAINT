@@ -9,6 +9,9 @@ import torch
 from torch import nn
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning import metrics
+
+import numpy as np
 
 
 class SAKTModel(pl.LightningModule):
@@ -23,9 +26,9 @@ class SAKTModel(pl.LightningModule):
     elif model == "saint":
       self.model = SAINT(**model_args)
       
-  
   def forward(self,exercise,category,response,etime):
-    return self.model(exercise,category,response,etime)
+    #return self.model(exercise,category,response,etime)
+    return self.model(exercise,category,response)
 
   def configure_optimizers(self):
     return torch.optim.Adam(self.parameters(),lr=1e-3)
@@ -37,7 +40,12 @@ class SAKTModel(pl.LightningModule):
     output = torch.masked_select(output.squeeze(),target_mask)
     target = torch.masked_select(target,target_mask)
     loss = nn.BCEWithLogitsLoss()(output.float(),target.float())
-    return {"loss":loss,"output":output,"target":target}
+    acc = metrics.Accuracy(output.float(),target.float())
+    #s_index = np.argsort(-output.float().cpu())
+    #s_target = target.float().cpu()[s_index]
+    #s_pred = output.float().cpu()[s_index]
+    #auc = metrics.functional.classification.auc(s_pred,s_target)
+    return {"loss":loss,"output":output,"target":target,"acc":acc}
   
   def validation_step(self,batch,batch_idx):
     inputs,target_ids,target = batch
@@ -46,29 +54,40 @@ class SAKTModel(pl.LightningModule):
     output = torch.masked_select(output.squeeze(),target_mask)
     target = torch.masked_select(target,target_mask)
     loss = nn.BCEWithLogitsLoss()(output.float(),target.float())
-    return {"val_loss":loss,"output":output,"target":target}
+    acc = metrics.Accuracy(output.float(),target)
+    s_index = np.argsort(-output.float().cpu(), axis=0)
+    s_target = target.float().cpu()[s_index]
+    s_pred = output.float().cpu()[s_index]
+    auc = metrics.functional.classification.auc(s_pred,s_target)
+    return {"val_loss":loss,"output":output,"target":target,"acc":acc,"auc":auc}
 
 train_loader, val_loader = get_dataloaders()
 
 ARGS = {"n_dims":config.EMBED_DIMS ,
-            'n_encoder':config.NUM_ENCODER,
-            'n_decoder':config.NUM_DECODER,
-            'enc_heads':config.ENC_HEADS,
-            'dec_heads':config.DEC_HEADS,
-            'total_ex':config.TOTAL_EXE,
-            'total_cat':config.TOTAL_CAT,
-            'total_responses':config.TOTAL_EXE,
-            'seq_len':config.MAX_SEQ}
+        'n_encoder':config.NUM_ENCODER,
+        'n_decoder':config.NUM_DECODER,
+        'enc_heads':config.ENC_HEADS,
+        'dec_heads':config.DEC_HEADS,
+        'total_ex':config.TOTAL_EXE,
+        'total_cat':config.TOTAL_CAT,
+        'total_responses':config.TOTAL_EXE,
+        'seq_len':config.MAX_SEQ
+       }
 
 ########### TRAINING AND SAVING MODEL #######
 checkpoint = ModelCheckpoint(filename="{epoch}_model",
-                              verbose=True,
-                              save_top_k=1,
-                              monitor="val_loss")
+                             verbose=True,
+                             save_top_k=1,
+                             monitor="val_loss")
 
-sakt_model = SAKTModel(model="ltmti",model_args=ARGS)
-trainer = pl.Trainer(progress_bar_refresh_rate=21,
-                      max_epochs=1,callbacks=[checkpoint]) 
+sakt_model = SAKTModel(model="saint", model_args=ARGS)
+trainer = pl.Trainer(progress_bar_refresh_rate=10,
+                     max_epochs=10,
+                     callbacks=[checkpoint],
+                     gpus=1,
+                     auto_lr_find=True) 
 trainer.fit(model = sakt_model,
-              train_dataloader=train_loader,val_dataloaders=val_loader) 
-trainer.save_checkpoint("model_sakt.pt")
+            train_dataloader=train_loader,
+            val_dataloaders=val_loader) 
+trainer.save_checkpoint("model_saint.pt")
+

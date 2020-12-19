@@ -3,6 +3,12 @@ import numpy as np
 from torch import nn
 import copy
 
+"""
+上三角
+如果diagonal为空，输入矩阵保留主对角线与主对角线以上的元素；
+如果diagonal为正数n，输入矩阵保留主对角线与主对角线以上除去n行的元素；
+如果diagonal为负数-n，输入矩阵保留主对角线与主对角线以上与主对角线下方h行对角线的元素；
+"""
 def ut_mask(seq_len):
     """ Upper Triangular Mask
     """
