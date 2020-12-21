@@ -4,6 +4,7 @@ import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
+from sklearn.metrics import roc_auc_score
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -21,11 +22,11 @@ EMBED_DIMS = 128
 ENC_HEADS = DEC_HEADS = 8
 NUM_ENCODER = NUM_DECODER = 6
 BATCH_SIZE = 32
-TRAIN_FILE = "/kaggle/input/riiid-test-answer-prediction/train.csv"
+TRAIN_FILE = "../Riiid_kaggle/riiid-test-answer-prediction/train.csv"
 TOTAL_EXE = 13523
 TOTAL_CAT = 13523
 
-EPOCH = 1
+EPOCH = 20
 
 # Data Loader
 
@@ -115,13 +116,13 @@ def get_dataloaders():
     dtypes = {'timestamp': 'int64', 'user_id': 'int32' ,'content_id': 'int16',
                 'answered_correctly':'int8',"prior_question_elapsed_time":"float32","task_container_id":"int16"}
     print("loading csv.....")
-#     train_df = pd.read_csv(TRAIN_FILE,dtype=dtypes, nrows=10000)
-    train_df = pd.read_csv(TRAIN_FILE,dtype=dtypes)
+    train_df = pd.read_csv(TRAIN_FILE,dtype=dtypes, nrows=1000000)
+    #train_df = pd.read_csv(TRAIN_FILE,dtype=dtypes)
     print("shape of dataframe :",train_df.shape) 
 
     train_df = train_df[train_df.content_type_id==0]  # only consider question
     
-    train_df = train_df.groupby('user_id', as_index=False).apply(get_et_lt)
+    train_df = train_df.groupby('user_id', as_index=False).apply(get_lt)
     train_df.index = train_df.index.droplevel(0)
     train_df.sort_index()
     
@@ -378,7 +379,8 @@ class SAINTModel(pl.LightningModule):
     output = torch.masked_select(output.squeeze(),target_mask)
     target = torch.masked_select(target,target_mask)
     loss = nn.BCEWithLogitsLoss()(output.float(),target.float())
-    return {"val_loss":loss,"output":output,"target":target}
+    auc = roc_auc_score(target.float(), output.float())
+    return {"val_loss":loss,"output":output,"target":target, "auc":auc}
 
 train_loader, val_loader = get_dataloaders()
 
@@ -396,7 +398,7 @@ ARGS = {"n_dims":EMBED_DIMS ,
 checkpoint = ModelCheckpoint(filename="{epoch}_model",
                               verbose=True,
                               save_top_k=1,
-                              monitor="val_loss")
+                              monitor="auc")
 
 saint_model = SAINTModel(model_args=ARGS)
 trainer = pl.Trainer(progress_bar_refresh_rate=21,

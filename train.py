@@ -41,10 +41,6 @@ class SAKTModel(pl.LightningModule):
     target = torch.masked_select(target,target_mask)
     loss = nn.BCEWithLogitsLoss()(output.float(),target.float())
     acc = metrics.Accuracy(output.float(),target.float())
-    #s_index = np.argsort(-output.float().cpu())
-    #s_target = target.float().cpu()[s_index]
-    #s_pred = output.float().cpu()[s_index]
-    #auc = metrics.functional.classification.auc(s_pred,s_target)
     return {"loss":loss,"output":output,"target":target,"acc":acc}
   
   def validation_step(self,batch,batch_idx):
@@ -55,10 +51,7 @@ class SAKTModel(pl.LightningModule):
     target = torch.masked_select(target,target_mask)
     loss = nn.BCEWithLogitsLoss()(output.float(),target.float())
     acc = metrics.Accuracy(output.float(),target)
-    s_index = np.argsort(-output.float().cpu(), axis=0)
-    s_target = target.float().cpu()[s_index]
-    s_pred = output.float().cpu()[s_index]
-    auc = metrics.functional.classification.auc(s_pred,s_target)
+    auc = roc_auc_score(target.float(), output.float())
     return {"val_loss":loss,"output":output,"target":target,"acc":acc,"auc":auc}
 
 train_loader, val_loader = get_dataloaders()
@@ -78,7 +71,7 @@ ARGS = {"n_dims":config.EMBED_DIMS ,
 checkpoint = ModelCheckpoint(filename="{epoch}_model",
                              verbose=True,
                              save_top_k=1,
-                             monitor="val_loss")
+                             monitor="auc")
 
 sakt_model = SAKTModel(model="saint", model_args=ARGS)
 trainer = pl.Trainer(progress_bar_refresh_rate=10,
